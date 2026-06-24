@@ -147,10 +147,24 @@ def dump_local_dataset(name: str, cfg: dict, out_wav_dir: Path, writer,
     print(f"[{name}] local done: {n_ok}")
 
 def dump_dataset(name: str, cfg: dict, out_wav_dir: Path, writer,
-                 sample_rate: int = 16000, max_items: int = None):
+                 sample_rate: int = 16000, max_items: int = None,
+                 skip_if_done: bool = True):
     if cfg.get("local_path"):
         dump_local_dataset(name, cfg, out_wav_dir, writer, sample_rate)
         return
+
+    done_marker = out_wav_dir / name / ".done"
+    if skip_if_done and done_marker.exists():
+        n = 0
+        with open(done_marker, encoding="utf-8") as fi:
+            for line in fi:
+                row = line.rstrip("\n").split("\t")
+                if len(row) == 5:
+                    writer.writerow(row); n += 1
+        print(f"[{name}] SKIP — đã tải xong trước đó ({n} rows). "
+              f"Xoá {done_marker} nếu muốn tải lại.")
+        return
+
     print(f"[{name}] loading {cfg['hf_id']} ({cfg.get('config')})")
     load_kwargs = dict(split=cfg["split"], streaming=True)
     if cfg.get("config"):
@@ -165,23 +179,32 @@ def dump_dataset(name: str, cfg: dict, out_wav_dir: Path, writer,
 
     out_dir = out_wav_dir / name
     out_dir.mkdir(parents=True, exist_ok=True)
+    # File cache rows (uid, text, wav_path) — dùng cho rerun không phải stream lại
+    marker = out_dir / ".done"
+    cache_fp = open(out_dir / ".rows.tsv", "w", encoding="utf-8")
     n_ok = 0
-    for i, ex in enumerate(ds):
-        if max_items and i >= max_items: break
-        text = clean_text(str(ex.get(cfg["text_col"]) or ""))
-        if len(text) < 2: continue
-        audio = ex[cfg["audio_col"]]
-        arr, sr = audio["array"], audio["sampling_rate"]
-        uid = utt_id(name, i, text)
-        # Shard dir để tránh 1 folder triệu file
-        shard = out_dir / f"{i // 5000:05d}"
-        shard.mkdir(parents=True, exist_ok=True)
-        wav_p = shard / f"{uid}.wav"
-        if not wav_p.exists():
-            sf.write(wav_p, arr, sr, subtype="PCM_16")
-        writer.writerow([uid, text, str(wav_p), name, cfg["tier"]])
-        n_ok += 1
-        if n_ok % 1000 == 0: print(f"  {name}: {n_ok}")
+    try:
+        for i, ex in enumerate(ds):
+            if max_items and i >= max_items: break
+            text = clean_text(str(ex.get(cfg["text_col"]) or ""))
+            if len(text) < 2: continue
+            audio = ex[cfg["audio_col"]]
+            arr, sr = audio["array"], audio["sampling_rate"]
+            uid = utt_id(name, i, text)
+            shard = out_dir / f"{i // 5000:05d}"
+            shard.mkdir(parents=True, exist_ok=True)
+            wav_p = shard / f"{uid}.wav"
+            if not wav_p.exists():
+                sf.write(wav_p, arr, sr, subtype="PCM_16")
+            row = [uid, text, str(wav_p), name, cfg["tier"]]
+            writer.writerow(row)
+            cache_fp.write("\t".join(row) + "\n")
+            n_ok += 1
+            if n_ok % 1000 == 0: print(f"  {name}: {n_ok}")
+    finally:
+        cache_fp.close()
+    # Ghi marker .done → lần sau rerun sẽ skip HF stream
+    (out_dir / ".rows.tsv").rename(marker)
     print(f"[{name}] done: {n_ok}")
 
 def main():
