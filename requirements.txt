@@ -1,0 +1,12 @@
+torch>=2.1
+torchaudio>=2.1
+k2
+lhotse[full]
+sentencepiece
+num2words
+jiwer
+openai-whisper
+onnx
+onnxruntime
+tensorboard
+# Cài icefall qua git: git clone https://github.com/k2-fsa/icefall && export PYTHONPATH=$PWD/icefall:$PYTHONPATH
