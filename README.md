@@ -86,7 +86,7 @@ conda create -n vi_asr python=3.10 -y && conda activate vi_asr
 pip install torch==2.3.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu121
 
 # k2 (phải match torch + cuda version)
-pip install k2==1.24.4.dev20240725+cuda12.1.torch2.3.1 -f https://k2-fsa.github.io/k2/cuda.html
+pip install k2==1.24.4.dev20240606+cuda12.1.torch2.3.1 -f https://k2-fsa.github.io/k2/cuda.html
 
 # Pipeline deps
 pip install -r requirements.txt
