@@ -152,10 +152,15 @@ def dump_dataset(name: str, cfg: dict, out_wav_dir: Path, writer,
         dump_local_dataset(name, cfg, out_wav_dir, writer, sample_rate)
         return
     print(f"[{name}] loading {cfg['hf_id']} ({cfg.get('config')})")
-    ds = load_dataset(
-        cfg["hf_id"], cfg.get("config"),
-        split=cfg["split"], trust_remote_code=True, streaming=True,
-    )
+    load_kwargs = dict(split=cfg["split"], streaming=True)
+    if cfg.get("config"):
+        load_kwargs["name"] = cfg["config"]
+    try:
+        ds = load_dataset(cfg["hf_id"], **load_kwargs)
+    except TypeError:
+        # Một số dataset cũ vẫn cần trust_remote_code; thử lại nếu datasets < 3.0
+        load_kwargs["trust_remote_code"] = True
+        ds = load_dataset(cfg["hf_id"], **load_kwargs)
     ds = ds.cast_column(cfg["audio_col"], Audio(sampling_rate=sample_rate))
 
     out_dir = out_wav_dir / name
@@ -186,18 +191,34 @@ def main():
     ap.add_argument("--datasets", default=",".join(DATASETS.keys()),
                     help="comma list, vd: common_voice,vivos,fosd")
     ap.add_argument("--max-items-per-ds", type=int, default=None)
+    ap.add_argument("--append", action="store_true",
+                    help="Append vào TSV thay vì ghi đè (để bổ sung dataset)")
     args = ap.parse_args()
 
     Path(args.out_wav_dir).mkdir(parents=True, exist_ok=True)
     chosen = [d.strip() for d in args.datasets.split(",")]
 
-    with open(args.out_tsv, "w", encoding="utf-8") as fo:
+    mode = "a" if args.append and Path(args.out_tsv).exists() else "w"
+    with open(args.out_tsv, mode, encoding="utf-8") as fo:
         w = csv.writer(fo, delimiter="\t")
+        failed = []
         for name in chosen:
             if name not in DATASETS:
                 print(f"skip unknown: {name}"); continue
-            dump_dataset(name, DATASETS[name], Path(args.out_wav_dir), w,
-                         max_items=args.max_items_per_ds)
+            try:
+                dump_dataset(name, DATASETS[name], Path(args.out_wav_dir), w,
+                             max_items=args.max_items_per_ds)
+            except Exception as e:
+                msg = str(e)
+                if "GatedRepo" in type(e).__name__ or "gated" in msg.lower() or "403" in msg:
+                    print(f"[{name}] GATED — xin access tại https://huggingface.co/datasets/"
+                          f"{DATASETS[name].get('hf_id')} rồi `hf auth login`")
+                else:
+                    print(f"[{name}] FAILED: {type(e).__name__}: {msg[:200]}")
+                failed.append(name)
+        if failed:
+            print(f"\n=== Failed datasets: {failed}")
+            print("Pipeline tiếp tục với các dataset đã tải thành công.")
 
 if __name__ == "__main__":
     main()

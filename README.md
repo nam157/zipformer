@@ -85,8 +85,15 @@ conda create -n vi_asr python=3.10 -y && conda activate vi_asr
 # PyTorch (chọn theo CUDA version của bro)
 pip install torch==2.3.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu121
 
-# k2 (phải match torch + cuda version)
-pip install k2==1.24.4.dev20240725+cuda12.1.torch2.3.1 -f https://k2-fsa.github.io/k2/cuda.html
+# k2 (phải match torch + cuda version — xem list tại https://k2-fsa.github.io/k2/cuda.html)
+# Với torch 2.3.1 + cu121:
+pip install k2==1.24.4.dev20240606+cuda12.1.torch2.3.1 -f https://k2-fsa.github.io/k2/cuda.html
+# Hoặc bản mới hơn cùng combo:
+# pip install k2==1.24.4.dev20241030+cuda12.1.torch2.3.1 -f https://k2-fsa.github.io/k2/cuda.html
+
+# Tip: nếu pip báo "Could not find", check phần "+cudaXX.X.torchY.Y.Z" phải match
+#   torch + cuda đã cài. Liệt kê tất cả build có sẵn:
+#   pip install k2== -f https://k2-fsa.github.io/k2/cuda.html 2>&1 | grep "torch$(python -c 'import torch; print(torch.__version__.split(\"+\")[0])')"
 
 # Pipeline deps
 pip install -r requirements.txt
@@ -96,8 +103,9 @@ git clone https://github.com/k2-fsa/icefall ../icefall
 cd ../icefall && pip install -r requirements.txt && cd -
 export PYTHONPATH=$(pwd)/../icefall:$(pwd):$PYTHONPATH
 
-# Verify
-python -c "import torch, k2, lhotse; print(torch.__version__, k2.__version__, lhotse.__version__)"
+# Verify — k2 dùng __dev_version__ chứ không phải __version__
+python -c "import torch, k2, lhotse; print(torch.__version__, k2.__dev_version__, lhotse.__version__)"
+python -c "import torch, k2; print('CUDA OK' if torch.cuda.is_available() and k2.with_cuda else 'BROKEN')"
 ```
 
 Thêm vào `~/.bashrc`:
@@ -124,10 +132,26 @@ cuts.to_jsonl('data/manifests/musan_cuts.jsonl.gz')
 ### Pretrained checkpoint (English ZipFormer streaming)
 
 ```bash
+# huggingface_hub >= 1.20: dùng `hf` (huggingface-cli đã deprecated)
 mkdir -p pretrain
-# Download từ HF
-wget -O pretrain/zipformer_en_streaming.pt \
-  https://huggingface.co/k2-fsa/icefall-asr-librispeech-zipformer-streaming-2023-05-17/resolve/main/exp/pretrained.pt
+hf download \
+  Zengwei/icefall-asr-librispeech-zipformer-2023-05-15 \
+  exp/pretrained.pt \
+  --local-dir pretrain/zipformer_en
+ln -sf zipformer_en/exp/pretrained.pt pretrain/zipformer_en_streaming.pt
+
+# Nếu 401 / repo private, login trước:
+#   hf auth login   # paste token từ https://huggingface.co/settings/tokens
+```
+
+Verify checkpoint hợp lệ:
+```bash
+python -c "
+import torch
+sd = torch.load('pretrain/zipformer_en_streaming.pt', map_location='cpu')
+sd = sd.get('model', sd)
+print('keys:', len(sd), '| has encoder:', any(k.startswith('encoder.') for k in sd))
+"
 ```
 
 ---

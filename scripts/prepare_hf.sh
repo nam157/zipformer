@@ -9,11 +9,14 @@ TSV_NORM=$DATA_DIR/transcript.norm.tsv
 TSV_REFINED=$DATA_DIR/transcript.refined.tsv
 
 # Stage 0: tải HF datasets (streaming, lưu wav 16k mono)
-# 11 nguồn ~6000h (VLSP yêu cầu đăng ký, để sẵn ở data/raw/vlsp20{20,21,23}/)
+# 11 nguồn ~6000h (VLSP local; bud500 + gigaspeech2 là gated repo → cần `hf auth login`
+# sau khi được approve trên web HF: https://huggingface.co/datasets/{linhtran92/viet_bud500,speechcolab/gigaspeech2})
+DATASETS=${DATASETS:-vlsp2020,vlsp2021,vlsp2023,fosd,bud500,vietspeech,fleurs_vi,vietmed,gigaspeech2_vi,vivoice,phoaudiobook}
+
 python local/hf_datasets.py \
   --out-wav-dir $WAV_DIR \
   --out-tsv $TSV_RAW \
-  --datasets vlsp2020,vlsp2021,vlsp2023,fosd,bud500,vietspeech,fleurs_vi,vietmed,gigaspeech2_vi,vivoice,phoaudiobook
+  --datasets "$DATASETS"
 
 # Stage 1: chuẩn hoá text (giữ cột source/tier)
 python -c "

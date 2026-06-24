@@ -9,4 +9,13 @@ openai-whisper
 onnx
 onnxruntime
 tensorboard
+# HF data — pin <3 vì datasets 3.x bắt buộc torchcodec (chỉ build cho torch>=2.4)
+datasets>=2.18,<3.0
+fsspec<=2024.6.1   # khớp datasets 2.x
+huggingface_hub>=0.20
+# audio
+soundfile
+librosa            # phòng khi datasets cần
+# misc
+ffmpeg-python
 # Cài icefall qua git: git clone https://github.com/k2-fsa/icefall && export PYTHONPATH=$PWD/icefall:$PYTHONPATH
