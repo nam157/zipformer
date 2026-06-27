@@ -31,9 +31,12 @@ with open('$TSV_RAW') as fi, open('$TSV_NORM','w') as fo:
 "
 
 # Stage 2: Whisper refine chỉ áp cho tier noisy (tiết kiệm thời gian)
+# --compute-type int8_float16: giảm VRAM ~75% so với float32, accuracy giảm nhẹ
+# --beam-size 1: greedy decode, tiết kiệm thêm VRAM & nhanh hơn
 python local/whisper_refine.py \
   --tsv $TSV_NORM --wav-dir $WAV_DIR \
-  --out $TSV_REFINED --whisper-model large-v3 --max-wer 0.5
+  --out $TSV_REFINED --whisper-model large-v3 --max-wer 0.5 \
+  --compute-type int8_float16 --beam-size 1
 
 # Stage 3: build multi-source manifests (train_clean + train_full + dev/test per-source)
 python local/build_manifests_multi.py \
