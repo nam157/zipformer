@@ -47,7 +47,14 @@ python local/build_manifests_multi.py \
 python local/compute_fbank.py --manifest-dir $DATA_DIR/manifests \
   --fbank-dir $DATA_DIR/fbank --num-jobs 8
 
+mkdir -p $DATA_DIR/lang_bpe_500
 cut -f2 $TSV_REFINED > $DATA_DIR/lang_bpe_500/transcript.txt
+
+if [[ ! -s $DATA_DIR/lang_bpe_500/transcript.txt ]]; then
+  echo "ERROR: transcript.txt is empty — no rows survived the pipeline. Check $TSV_RAW and $TSV_REFINED."
+  exit 1
+fi
+
 python local/train_bpe.py --transcript $DATA_DIR/lang_bpe_500/transcript.txt \
   --vocab-size 2000 --lang-dir $DATA_DIR/lang_bpe_500
 python local/oov_stats.py --bpe-model $DATA_DIR/lang_bpe_500/bpe.model \

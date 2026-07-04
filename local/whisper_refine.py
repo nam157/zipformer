@@ -49,7 +49,11 @@ def main():
                 continue
             utt, ref, wav = row[0], row[1], row[2]
             extra = row[3:]  # giữ lại cột source, tier (nếu có)
-            wav_p = Path(args.wav_dir) / wav if not Path(wav).is_absolute() else Path(wav)
+            # TSV may store full relative paths (e.g. data/wav16k/fosd/...)
+            # or just the basename — try as-is first, then join with wav-dir.
+            wav_p = Path(wav) if Path(wav).is_absolute() else Path(wav)
+            if not wav_p.exists():
+                wav_p = Path(args.wav_dir) / wav
             if not wav_p.exists():
                 continue
             segments, _info = model.transcribe(
