@@ -10,6 +10,16 @@ Dùng faster-whisper (CTranslate2) để giảm VRAM so với openai-whisper g�
 import argparse, csv
 from pathlib import Path
 import jiwer
+from tqdm import tqdm
+
+def count_rows(tsv_path: str) -> int:
+    """Đếm số dòng hợp lệ (>= 3 cột) trong TSV để tqdm biết tổng số."""
+    count = 0
+    with open(tsv_path, encoding="utf-8") as f:
+        for row in csv.reader(f, delimiter="\t"):
+            if len(row) >= 3:
+                count += 1
+    return count
 
 def main():
     ap = argparse.ArgumentParser()
@@ -41,10 +51,26 @@ def main():
         compute_type=args.compute_type,
     )
 
+    print("Đang đếm số utterance...", flush=True)
+    total = count_rows(args.tsv)
+    print(f"Tổng: {total} utterance\n", flush=True)
+
     kept, replaced, dropped = 0, 0, 0
-    with open(args.tsv, encoding="utf-8") as fi, open(args.out, "w", encoding="utf-8") as fo:
+    with open(args.tsv, encoding="utf-8") as fi, \
+         open(args.out, "w", encoding="utf-8") as fo:
         w = csv.writer(fo, delimiter="\t")
-        for row in csv.reader(fi, delimiter="\t"):
+        pbar = tqdm(
+            csv.reader(fi, delimiter="\t"),
+            total=total,
+            unit="utt",
+            dynamic_ncols=True,
+            bar_format=(
+                "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}] "
+                "kept={postfix[kept]} repl={postfix[repl]} drop={postfix[drop]}"
+            ),
+            postfix={"kept": 0, "repl": 0, "drop": 0},
+        )
+        for row in pbar:
             if len(row) < 3:
                 continue
             utt, ref, wav = row[0], row[1], row[2]
@@ -55,6 +81,7 @@ def main():
             if not wav_p.exists():
                 wav_p = Path(args.wav_dir) / wav
             if not wav_p.exists():
+                pbar.update(1)
                 continue
             segments, _info = model.transcribe(
                 str(wav_p), language="vi", beam_size=args.beam_size
@@ -66,12 +93,17 @@ def main():
                 wer = 1.0
 
             if wer <= args.max_wer:
-                w.writerow([utt, ref, str(wav_p)] + extra); kept += 1
+                w.writerow([utt, ref, str(wav_p)] + extra)
+                kept += 1
             elif wer <= args.replace_wer:
-                w.writerow([utt, hyp, str(wav_p)] + extra); replaced += 1
+                w.writerow([utt, hyp, str(wav_p)] + extra)
+                replaced += 1
             else:
                 dropped += 1
-    print(f"kept={kept} replaced={replaced} dropped={dropped}")
+
+            pbar.set_postfix(kept=kept, repl=replaced, drop=dropped)
+
+    print(f"\nDone! kept={kept} replaced={replaced} dropped={dropped}")
 
 if __name__ == "__main__":
     main()
